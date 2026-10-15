@@ -83,8 +83,9 @@ func generateUsers(ctx context.Context, count int) error {
 		}
 
 		err := db.NewQuery(nil, 100).InsertCategory(category, false)
-		if err != nil {
-			log.Print(err.Error())
+		// a colliding random ID means an earlier generate already created this category, which is fine to reuse
+		if err != nil && !database.IsUniqueViolation(err) {
+			return err
 		}
 		category = database.Category{
 			ID: category.ID,
@@ -167,8 +168,8 @@ func generateUsers(ctx context.Context, count int) error {
 		UpdatedAt:       util.GetTimestamp().Format(time.RFC3339),
 	}
 	err := db.NewQuery(nil, 100).InsertTeam(team)
-	if err != nil {
-		log.Print(err.Error())
+	if err != nil && !database.IsUniqueViolation(err) {
+		return err
 	}
 
 	// drops entitlements static data

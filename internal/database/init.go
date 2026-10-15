@@ -86,12 +86,14 @@ func checkAndUpdate(db sqlx.DB) error {
 		fmt.Println(migrateSQL[i].Message)
 	}
 
-	_, err = db.Exec("PRAGMA user_version=" + strconv.Itoa(currentVersion))
+	_, err = db.Exec(setVersionSQL)
 	if err != nil {
 		return err
 	}
 	return nil
 }
+
+var setVersionSQL = "PRAGMA user_version=" + strconv.Itoa(currentVersion)
 
 func initDatabase(db sqlx.DB) error {
 	createSQL := `
@@ -130,9 +132,9 @@ create table vips ( broadcaster_id text not null, user_id text not null, created
 
 	// The version is set in the same transaction as the tables, so a run killed here leaves either
 	// a complete schema or none; checkAndUpdate would otherwise re-run migrations over the new tables.
-	createSQL += "\nPRAGMA user_version=" + strconv.Itoa(currentVersion) + ";"
+	createSQL += "\n" + setVersionSQL + ";"
 
-	for i := 1; i <= 5; i++ {
+	for i := 1; ; i++ {
 		tx := db.MustBegin()
 		_, err := tx.Exec(createSQL)
 		if err == nil {
@@ -147,6 +149,4 @@ create table vips ( broadcaster_id text not null, user_id text not null, created
 		}
 		log.Printf("%#v", err)
 	}
-
-	return nil
 }

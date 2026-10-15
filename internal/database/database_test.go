@@ -594,12 +594,9 @@ func TestEmptyDatabaseFile(t *testing.T) {
 	a.Nil(os.WriteFile(path, nil, 0644))
 	defer os.Remove(path)
 
-	prev := dbFileName
+	prev := viper.GetString("DB_FILENAME")
 	viper.Set("DB_FILENAME", name)
-	defer func() {
-		viper.Set("DB_FILENAME", prev)
-		dbFileName = prev
-	}()
+	defer viper.Set("DB_FILENAME", prev)
 
 	edb, err := NewConnection(true)
 	a.Nil(err)
@@ -616,18 +613,18 @@ func TestTransactionRollback(t *testing.T) {
 
 	tx, err := db.DB.Beginx()
 	a.Nil(err)
-	txdb := CLIDatabase{DB: db.DB, Tx: tx}
+	tq := CLIDatabase{DB: db.DB, Tx: tx}.NewQuery(nil, 100)
 
 	userID := util.RandomUserID()
-	err = txdb.NewQuery(nil, 100).InsertUser(User{ID: userID, UserLogin: "tx_user", DisplayName: "tx_user", Email: ""}, false)
+	err = tq.InsertUser(User{ID: userID, UserLogin: "tx_user", DisplayName: "tx_user", Email: ""}, false)
 	a.Nil(err)
 
 	// InsertPoll opens its own transaction, which must nest inside tx rather than fail or commit early
 	pollID := util.RandomGUID()
-	err = txdb.NewQuery(nil, 100).InsertPoll(Poll{ID: pollID, BroadcasterID: userID, Title: "tx", Status: "ACTIVE", StartedAt: util.GetTimestamp().Format(time.RFC3339)})
+	err = tq.InsertPoll(Poll{ID: pollID, BroadcasterID: userID, Title: "tx", Status: "ACTIVE", StartedAt: util.GetTimestamp().Format(time.RFC3339)})
 	a.Nil(err)
 
-	dbr, err := txdb.NewQuery(nil, 100).GetPolls(Poll{ID: pollID})
+	dbr, err := tq.GetPolls(Poll{ID: pollID})
 	a.Nil(err)
 	a.Len(dbr.Data.([]Poll), 1)
 

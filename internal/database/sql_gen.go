@@ -4,14 +4,42 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/mattn/go-sqlite3"
 )
 
 const SEP_AND = "and"
 const SEP_OR = "or"
+
+// maxIDRetries bounds how often a random ID or token is regenerated after a collision.
+const maxIDRetries = 10
+
+// retryOnUniqueViolation runs insert, calling regenerate and trying again when it collides with an
+// existing row; any other error is a real failure and is returned as is.
+func retryOnUniqueViolation(insert func() error, regenerate func()) error {
+	for i := 0; ; i++ {
+		err := insert()
+		if err == nil || !IsUniqueViolation(err) || i == maxIDRetries {
+			return err
+		}
+		regenerate()
+	}
+}
+
+// IsUniqueViolation reports whether err is a collision on a unique column or on a primary key, which
+// SQLite reports with different codes but the same "UNIQUE constraint failed" message.
+func IsUniqueViolation(err error) bool {
+	var se sqlite3.Error
+	if !errors.As(err, &se) {
+		return false
+	}
+	return se.ExtendedCode == sqlite3.ErrConstraintUnique || se.ExtendedCode == sqlite3.ErrConstraintPrimaryKey
+}
 
 type InternalPagination struct {
 	SQL string
