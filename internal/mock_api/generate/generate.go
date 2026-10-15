@@ -33,18 +33,34 @@ func Generate(userCount int) error {
 		return err
 	}
 
+	// One transaction for the whole seed: a single commit instead of one sync per row, and a seed
+	// that dies partway leaves nothing behind, so IsFirstRun still reports the DB as empty.
+	tx, err := db.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	db.Tx = tx
+
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "db", db)
 
 	// generate users and random related info (follows, bans, etc)
-	generateUsers(ctx, userCount)
+	if err := generateUsers(ctx, userCount); err != nil {
+		return err
+	}
 
 	// generate a client and fake secret
 	c, err := generateClient(ctx)
 	if err != nil {
 		return err
 	}
-	generateAuthorization(ctx, c, "")
+	if err := generateAuthorization(ctx, c, ""); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
 
 	log.Print("Finished generation.")
 	return nil
@@ -116,7 +132,7 @@ func generateUsers(ctx context.Context, count int) error {
 
 		err := db.NewQuery(nil, 100).InsertUser(u, false)
 		if err != nil {
-			log.Print(err.Error())
+			return err
 		}
 
 		// Create user chatroom settings
@@ -136,7 +152,10 @@ func generateUsers(ctx context.Context, count int) error {
 			NonModeratorChatDelayDuration: &_10,
 		}
 
-		db.NewQuery(nil, 100).InsertChatSettings(s)
+		err = db.NewQuery(nil, 100).InsertChatSettings(s)
+		if err != nil {
+			return err
+		}
 	}
 	// fake team
 	log.Printf("Creating team...")
@@ -196,7 +215,7 @@ func generateUsers(ctx context.Context, count int) error {
 
 			err := db.NewQuery(nil, 100).InsertChannelPointsReward(copoReward)
 			if err != nil {
-				log.Print(err.Error())
+				return err
 			}
 		}
 
@@ -211,7 +230,7 @@ func generateUsers(ctx context.Context, count int) error {
 		}
 		err = db.NewQuery(nil, 1000).InsertDropsEntitlement(entitlement)
 		if err != nil {
-			log.Print(err.Error())
+			return err
 		}
 
 		// create fake polls
@@ -233,7 +252,7 @@ func generateUsers(ctx context.Context, count int) error {
 
 		err = db.NewQuery(nil, 100).InsertPoll(poll)
 		if err != nil {
-			log.Print(err.Error())
+			return err
 		}
 
 		// create fake predictions
@@ -275,7 +294,7 @@ func generateUsers(ctx context.Context, count int) error {
 
 		err = db.NewQuery(nil, 100).InsertPrediction(prediction)
 		if err != nil {
-			log.Print(err.Error())
+			return err
 		}
 
 		// create fake schedule event
@@ -302,7 +321,7 @@ func generateUsers(ctx context.Context, count int) error {
 
 			err := db.NewQuery(nil, 100).InsertSchedule(segment)
 			if err != nil {
-				log.Print(err.Error())
+				return err
 			}
 		}
 
@@ -327,7 +346,7 @@ func generateUsers(ctx context.Context, count int) error {
 				}
 				err := db.NewQuery(nil, 100).InsertChannelPointsRedemption(copoRedemption)
 				if err != nil {
-					log.Print(err.Error())
+					return err
 				}
 			}
 
@@ -335,7 +354,7 @@ func generateUsers(ctx context.Context, count int) error {
 				choice := util.RandomInt(2)
 				err = db.NewQuery(nil, 100).UpdatePollChoice(database.PollsChoice{ID: poll.Choices[choice].ID})
 				if err != nil {
-					log.Print(err.Error())
+					return err
 				}
 			}
 
@@ -343,7 +362,7 @@ func generateUsers(ctx context.Context, count int) error {
 				option := util.RandomInt(2)
 				err = db.NewQuery(nil, 100).InsertPredictionPrediction(database.PredictionPrediction{PredictionID: prediction.ID, UserID: user.ID, Amount: int(util.RandomInt(10 * 1000)), OutcomeID: prediction.Outcomes[option].ID})
 				if err != nil {
-					log.Print(err.Error())
+					return err
 				}
 			}
 			// can't follow/block yourself :)
@@ -356,7 +375,7 @@ func generateUsers(ctx context.Context, count int) error {
 			if shouldBlock {
 				err := db.NewQuery(nil, 100).AddBlock(database.UserRequestParams{UserID: user.ID, BroadcasterID: broadcaster.ID})
 				if err != nil {
-					log.Print(err.Error())
+					return err
 				}
 				// since you're blocked, can't do any of the other things, so continue
 				continue
@@ -365,7 +384,7 @@ func generateUsers(ctx context.Context, count int) error {
 			if shouldBan {
 				err := db.NewQuery(nil, 100).InsertBan(database.UserRequestParams{UserID: user.ID, BroadcasterID: broadcaster.ID})
 				if err != nil {
-					log.Print(err.Error())
+					return err
 				}
 				// if banned, you wouldn't be able to follow or anything else- so continuing
 				continue
@@ -375,7 +394,7 @@ func generateUsers(ctx context.Context, count int) error {
 			if shouldFollow {
 				err := db.NewQuery(nil, 100).AddFollow(database.UserRequestParams{UserID: user.ID, BroadcasterID: broadcaster.ID})
 				if err != nil {
-					log.Print(err.Error())
+					return err
 				}
 			}
 
@@ -389,7 +408,7 @@ func generateUsers(ctx context.Context, count int) error {
 					IsGift:        false,
 				})
 				if err != nil {
-					log.Print(err.Error())
+					return err
 				}
 			}
 
@@ -397,7 +416,7 @@ func generateUsers(ctx context.Context, count int) error {
 			if shouldMod {
 				err := db.NewQuery(nil, 100).AddModerator(database.UserRequestParams{UserID: user.ID, BroadcasterID: broadcaster.ID})
 				if err != nil {
-					log.Print(err.Error())
+					return err
 				}
 			}
 
@@ -405,7 +424,7 @@ func generateUsers(ctx context.Context, count int) error {
 			if shouldAddEditor {
 				err := db.NewQuery(nil, 100).AddEditor(database.UserRequestParams{BroadcasterID: broadcaster.ID, UserID: user.ID})
 				if err != nil {
-					log.Print(err.Error())
+					return err
 				}
 			}
 
@@ -422,7 +441,7 @@ func generateUsers(ctx context.Context, count int) error {
 				UserID: broadcaster.ID,
 			})
 			if err != nil {
-				log.Print(err.Error())
+				return err
 			}
 		}
 
@@ -444,7 +463,7 @@ func generateUsers(ctx context.Context, count int) error {
 		}
 		err := db.NewQuery(nil, 100).InsertStream(s, false)
 		if err != nil {
-			log.Print(err.Error())
+			return err
 		}
 		streams = append(streams, Stream{ID: s.ID, Broacaster: s.UserID})
 	}
@@ -457,7 +476,7 @@ func generateUsers(ctx context.Context, count int) error {
 		}
 		err := db.NewQuery(nil, 100).InsertTag(tag)
 		if err != nil {
-			log.Print(err.Error())
+			return err
 		}
 		tagIds = append(tagIds, tag.ID)
 	}
@@ -484,7 +503,7 @@ func generateUsers(ctx context.Context, count int) error {
 		}
 		err := db.NewQuery(nil, 100).InsertVideo(v)
 		if err != nil {
-			log.Print(err.Error())
+			return err
 		}
 
 		// muted sections
@@ -496,7 +515,7 @@ func generateUsers(ctx context.Context, count int) error {
 			}
 			err := db.NewQuery(nil, 100).InsertMutedSegmentsForVideo(vms)
 			if err != nil {
-				log.Print(err.Error())
+				return err
 			}
 		}
 
@@ -516,7 +535,7 @@ func generateUsers(ctx context.Context, count int) error {
 		}
 		err = db.NewQuery(nil, 100).InsertClip(c)
 		if err != nil {
-			log.Print(err.Error())
+			return err
 		}
 	}
 

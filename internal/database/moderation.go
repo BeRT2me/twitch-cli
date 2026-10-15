@@ -112,7 +112,7 @@ func (q *Query) AddModerator(p UserRequestParams) error {
 		},
 	}
 
-	tx := q.DB.MustBegin()
+	tx := q.begin()
 	tx.NamedExec(stmt, p)
 	tx.NamedExec(`INSERT INTO moderator_actions VALUES(:id, :event_timestamp, :event_type, :event_version, :broadcaster_id, :user_id)`, ma)
 	return tx.Commit()
@@ -155,7 +155,7 @@ func (q *Query) RemoveModerator(broadcaster string, user string) error {
 		},
 	}
 
-	tx := q.DB.MustBegin()
+	tx := q.begin()
 	tx.Exec(`delete from moderators where broadcaster_id=$1 and user_id=$2`, broadcaster, user)
 	tx.NamedExec(`INSERT INTO moderator_actions VALUES(:id, :event_timestamp, :event_type, :event_version, :broadcaster_id, :user_id)`, ma)
 	return tx.Commit()
@@ -177,7 +177,7 @@ func (q *Query) InsertBan(p UserRequestParams) error {
 		},
 	}
 
-	tx := q.DB.MustBegin()
+	tx := q.begin()
 	tx.NamedExec(stmt, p)
 	tx.NamedExec(`INSERT INTO ban_events VALUES(:id, :event_timestamp, :event_type, :event_version, :broadcaster_id, :user_id, :expires_at)`, ma)
 	return tx.Commit()
@@ -220,7 +220,7 @@ func (q *Query) GetBans(p UserRequestParams) (*DBResponse, error) {
 }
 
 func (q *Query) DeleteBan(p UserRequestParams) error {
-	tx := q.DB.MustBegin()
+	tx := q.begin()
 	tx.Exec("DELETE FROM bans WHERE broadcaster_id=$1 AND user_id=$2", p.BroadcasterID, p.UserID)
 	err := tx.Commit()
 	return err

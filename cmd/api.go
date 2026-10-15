@@ -150,6 +150,5 @@ func mockStartRun(cmd *cobra.Command, args []string) error {
 }
 
 func generateMockRun(cmd *cobra.Command, args []string) error {
-	generate.Generate(generateCount)
-	return nil
+	return generate.Generate(generateCount)
 }

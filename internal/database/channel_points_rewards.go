@@ -108,7 +108,7 @@ func (q *Query) UpdateChannelPointsReward(r ChannelPointsReward) error {
 }
 
 func (q *Query) DeleteChannelPointsReward(id string) error {
-	tx := q.DB.MustBegin()
+	tx := q.begin()
 	tx.Exec("delete from channel_points_rewards where id=$1", id)
 	tx.Exec("update channel_points_redemptions set redemption_status='FULFILLED' where redemption_status='UNFULFILLED' and reward_id=$1", id)
 	err := tx.Commit()

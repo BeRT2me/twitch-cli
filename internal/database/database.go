@@ -19,6 +19,8 @@ var dbFileName = "eventCache.db"
 
 type CLIDatabase struct {
 	DB *sqlx.DB
+	// Tx, when set, makes every query from NewQuery run inside it.
+	Tx *sqlx.Tx
 }
 
 func NewConnection(extendedBusyTimeout bool) (CLIDatabase, error) {

@@ -583,6 +583,36 @@ func TestQuery(t *testing.T) {
 	db.NewQuery(request, 100)
 }
 
+func TestTransactionRollback(t *testing.T) {
+	a := test_setup.SetupTestEnv(t)
+
+	tx, err := db.DB.Beginx()
+	a.Nil(err)
+	txdb := CLIDatabase{DB: db.DB, Tx: tx}
+
+	userID := util.RandomUserID()
+	err = txdb.NewQuery(nil, 100).InsertUser(User{ID: userID, UserLogin: "tx_user", DisplayName: "tx_user", Email: ""}, false)
+	a.Nil(err)
+
+	// InsertPoll opens its own transaction, which must nest inside tx rather than fail or commit early
+	pollID := util.RandomGUID()
+	err = txdb.NewQuery(nil, 100).InsertPoll(Poll{ID: pollID, BroadcasterID: userID, Title: "tx", Status: "ACTIVE", StartedAt: util.GetTimestamp().Format(time.RFC3339)})
+	a.Nil(err)
+
+	dbr, err := txdb.NewQuery(nil, 100).GetPolls(Poll{ID: pollID})
+	a.Nil(err)
+	a.Len(dbr.Data.([]Poll), 1)
+
+	a.Nil(tx.Rollback())
+
+	dbr, err = q.GetUsers(User{ID: userID})
+	a.Nil(err)
+	a.Empty(dbr.Data.([]User))
+	dbr, err = q.GetPolls(Poll{ID: pollID})
+	a.Nil(err)
+	a.Empty(dbr.Data.([]Poll))
+}
+
 func TestStreams(t *testing.T) {
 	a := test_setup.SetupTestEnv(t)
 

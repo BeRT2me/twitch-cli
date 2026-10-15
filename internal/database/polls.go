@@ -72,7 +72,7 @@ func (q *Query) GetPolls(p Poll) (*DBResponse, error) {
 }
 
 func (q *Query) InsertPoll(p Poll) error {
-	tx := q.DB.MustBegin()
+	tx := q.begin()
 	tx.NamedExec(generateInsertSQL("polls", "id", p, false), p)
 	for _, c := range p.Choices {
 		tx.NamedExec(generateInsertSQL("poll_choices", "id", c, false), c)

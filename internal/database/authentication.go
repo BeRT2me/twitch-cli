@@ -63,14 +63,12 @@ func (q *Query) InsertOrUpdateAuthenticationClient(client AuthenticationClient, 
 }
 
 func (q *Query) CreateAuthorization(a Authorization) (Authorization, error) {
-	db := q.DB
-
 	a.Token = generateString(15)
 	a.ExpiresAt = util.GetTimestamp().Add(24 * 30 * time.Hour).Format(time.RFC3339Nano)
 
 	for {
 		// loop to create unique tokens; likely won't happen, but is worth handling regardless
-		tx := db.MustBegin()
+		tx := q.begin()
 		stmt := generateInsertSQL("authorizations", "", a, false)
 		_, err := tx.NamedExec(stmt, a)
 		if err != nil {
