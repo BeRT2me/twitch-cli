@@ -583,6 +583,34 @@ func TestQuery(t *testing.T) {
 	db.NewQuery(request, 100)
 }
 
+func TestEmptyDatabaseFile(t *testing.T) {
+	a := test_setup.SetupTestEnv(t)
+
+	// A first run killed during initialization leaves an empty file. Opening it must initialize the
+	// schema rather than treat the file as an existing database and fail its first migration.
+	p, _ := util.GetApplicationDir()
+	name := "test-empty-eventCache.db"
+	path := filepath.Join(p, name)
+	a.Nil(os.WriteFile(path, nil, 0644))
+	defer os.Remove(path)
+
+	prev := dbFileName
+	viper.Set("DB_FILENAME", name)
+	defer func() {
+		viper.Set("DB_FILENAME", prev)
+		dbFileName = prev
+	}()
+
+	edb, err := NewConnection(true)
+	a.Nil(err)
+	defer edb.DB.Close()
+	a.True(edb.IsFirstRun())
+
+	var version int
+	a.Nil(edb.DB.Get(&version, "PRAGMA user_version"))
+	a.Equal(currentVersion, version)
+}
+
 func TestTransactionRollback(t *testing.T) {
 	a := test_setup.SetupTestEnv(t)
 

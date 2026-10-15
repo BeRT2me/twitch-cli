@@ -7,9 +7,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
+	"github.com/mattn/go-sqlite3"
 	"github.com/twitchdev/twitch-cli/internal/util"
 )
 
@@ -53,9 +53,10 @@ func (q *Query) InsertOrUpdateAuthenticationClient(client AuthenticationClient, 
 
 	client.Secret = generateString(30)
 
-	for {
+	// Only an ID collision is retried, with a fresh random ID; any other error is a real failure.
+	for i := 0; ; i++ {
 		_, err := db.NamedExec(generateInsertSQL("clients", "id", client, upsert), client)
-		if err == nil {
+		if err == nil || !isUniqueViolation(err) || i == maxIDRetries {
 			return client, err
 		}
 		client.ID = util.RandomClientID()
@@ -66,22 +67,36 @@ func (q *Query) CreateAuthorization(a Authorization) (Authorization, error) {
 	a.Token = generateString(15)
 	a.ExpiresAt = util.GetTimestamp().Add(24 * 30 * time.Hour).Format(time.RFC3339Nano)
 
-	for {
-		// loop to create unique tokens; likely won't happen, but is worth handling regardless
+	// loop to create unique tokens; likely won't happen, but is worth handling regardless
+	for i := 0; ; i++ {
 		tx := q.begin()
 		stmt := generateInsertSQL("authorizations", "", a, false)
 		_, err := tx.NamedExec(stmt, a)
-		if err != nil {
-			log.Print(err)
-			return a, nil
+		if err == nil {
+			err = tx.Commit()
 		}
-
-		err = tx.Commit()
 		if err == nil {
 			return a, nil
 		}
+		tx.Rollback()
+		if !isUniqueViolation(err) || i == maxIDRetries {
+			return a, err
+		}
 		a.Token = generateString(15)
 	}
+}
+
+// maxIDRetries bounds how often a random ID or token is regenerated after a collision.
+const maxIDRetries = 10
+
+// isUniqueViolation reports whether err is a collision on a unique column or on a primary key, which
+// SQLite reports with different codes but the same "UNIQUE constraint failed" message.
+func isUniqueViolation(err error) bool {
+	var se sqlite3.Error
+	if !errors.As(err, &se) {
+		return false
+	}
+	return se.ExtendedCode == sqlite3.ErrConstraintUnique || se.ExtendedCode == sqlite3.ErrConstraintPrimaryKey
 }
 
 func (q *Query) GetAuthenticationClient(ac AuthenticationClient) (*DBResponse, error) {

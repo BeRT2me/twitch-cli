@@ -128,27 +128,24 @@ create table stream_schedule( id text not null primary key, broadcaster_id text 
 create table chat_settings( broadcaster_id text not null primary key, slow_mode boolean not null default 0, slow_mode_wait_time int not null default 10, follower_mode boolean not null default 0, follower_mode_duration int not null default 60, subscriber_mode boolean not null default 0, emote_mode boolean not null default 0, unique_chat_mode boolean not null default 0, non_moderator_chat_delay boolean not null default 0, non_moderator_chat_delay_duration int not null default 10, shieldmode_is_active boolean not null default 0, shieldmode_moderator_id text not null default '', shieldmode_moderator_login text not null default '', shieldmode_moderator_name text not null default '', shieldmode_last_activated text not null default '' );
 create table vips ( broadcaster_id text not null, user_id text not null, created_at text not null default '', primary key (broadcaster_id, user_id), foreign key (broadcaster_id) references users(id), foreign key (user_id) references users(id) );`
 
+	// The version is set in the same transaction as the tables, so a run killed here leaves either
+	// a complete schema or none; checkAndUpdate would otherwise re-run migrations over the new tables.
+	createSQL += "\nPRAGMA user_version=" + strconv.Itoa(currentVersion) + ";"
+
 	for i := 1; i <= 5; i++ {
 		tx := db.MustBegin()
-		tx.Exec(createSQL)
-		err := tx.Commit()
-		if err != nil {
-			if i == 5 {
-				return err
-			}
-			tx.Rollback()
-			log.Printf("%#v", err)
-			continue
+		_, err := tx.Exec(createSQL)
+		if err == nil {
+			err = tx.Commit()
 		}
 		if err == nil {
-			break
+			return nil
 		}
-	}
-
-	_, err := db.Exec("PRAGMA user_version=" + strconv.Itoa(currentVersion))
-	if err != nil {
-		log.Print(err)
-		return err
+		tx.Rollback()
+		if i == 5 {
+			return err
+		}
+		log.Printf("%#v", err)
 	}
 
 	return nil

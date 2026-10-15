@@ -44,10 +44,6 @@ func getDatabase(extendedBusyTimeout bool) (sqlx.DB, error) {
 	}
 
 	var path = filepath.Join(home, dbFileName)
-	var needToInit = false
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		needToInit = true
-	}
 
 	// force Foreign Key support ("fk=true")
 	dbFlags := "?_fk=true&cache=shared"
@@ -65,7 +61,14 @@ func getDatabase(extendedBusyTimeout bool) (sqlx.DB, error) {
 			continue
 		}
 
-		if needToInit {
+		// Decide from the schema rather than from whether the file exists: a first run killed during
+		// initialization leaves an empty file, which would otherwise skip init and then fail every migration.
+		var tables int
+		err = db.Get(&tables, "select count(*) from sqlite_master")
+		if err != nil {
+			return sqlx.DB{}, err
+		}
+		if tables == 0 {
 			err = initDatabase(*db)
 			if err != nil {
 				log.Printf("%#v", err)
