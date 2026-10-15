@@ -108,9 +108,12 @@ func (q *Query) UpdateChannelPointsReward(r ChannelPointsReward) error {
 }
 
 func (q *Query) DeleteChannelPointsReward(id string) error {
+	// Redemptions reference the reward, so they go with it. Twitch marks them FULFILLED instead, but
+	// they can only be fetched by the reward's ID, so they are unreachable either way once it is gone.
 	tx := q.begin()
-	tx.Exec("delete from channel_points_rewards where id=$1", id)
-	tx.Exec("update channel_points_redemptions set redemption_status='FULFILLED' where redemption_status='UNFULFILLED' and reward_id=$1", id)
-	err := tx.Commit()
-	return err
+	_, err := tx.Exec("delete from channel_points_redemptions where reward_id=$1", id)
+	if err == nil {
+		_, err = tx.Exec("delete from channel_points_rewards where id=$1", id)
+	}
+	return finish(tx, err)
 }

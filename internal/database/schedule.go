@@ -103,11 +103,7 @@ func (q *Query) GetSchedule(p ScheduleSegment, startTime time.Time) (*DBResponse
 func (q *Query) InsertSchedule(p ScheduleSegment) error {
 	tx := q.begin()
 	_, err := tx.NamedExec(generateInsertSQL("stream_schedule", "id", p, false), p)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	return tx.Commit()
+	return finish(tx, err)
 }
 
 func (q *Query) DeleteSegment(id string, broadcasterID string) error {

@@ -129,10 +129,17 @@ func (q *Query) InsertVideo(v Video) error {
 
 func (q *Query) DeleteVideo(id string) error {
 	tx := q.begin()
-	tx.MustExec("delete from stream_markers where video_id=$1", id)
-	tx.MustExec("delete from video_muted_segments where video_id=$1", id)
-	tx.MustExec("delete from videos where id = $1", id)
-	return tx.Commit()
+	var err error
+	for _, stmt := range []string{
+		"delete from stream_markers where video_id=$1",
+		"delete from video_muted_segments where video_id=$1",
+		"delete from videos where id = $1",
+	} {
+		if _, err = tx.Exec(stmt, id); err != nil {
+			break
+		}
+	}
+	return finish(tx, err)
 }
 
 func (q *Query) InsertMutedSegmentsForVideo(vms VideoMutedSegment) error {

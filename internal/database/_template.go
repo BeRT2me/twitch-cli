@@ -40,11 +40,6 @@ func (q *Query) GetPrinciple(p Principle) (*DBResponse, error) {
 
 func (q *Query) InsertPrinciple(p Principle, upsert bool) error {
 	tx := q.begin()
-	tx.NamedExec(`insert into principle values(:id, :values...)`, p)
-	err := tx.Commit()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	_, err := tx.NamedExec(`insert into principle values(:id, :values...)`, p)
+	return finish(tx, err)
 }

@@ -25,10 +25,18 @@ type dbtx interface {
 // queryTx is what a query needs from the transaction returned by begin.
 type queryTx interface {
 	Exec(query string, args ...any) (sql.Result, error)
-	MustExec(query string, args ...any) sql.Result
 	NamedExec(query string, arg any) (sql.Result, error)
 	Commit() error
 	Rollback() error
+}
+
+// finish ends a transaction from begin: a failed statement rolls it back and is returned, otherwise it commits.
+func finish(tx queryTx, err error) error {
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 type Query struct {

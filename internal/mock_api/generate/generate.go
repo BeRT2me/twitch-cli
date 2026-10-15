@@ -32,6 +32,7 @@ func Generate(userCount int) error {
 	if err != nil {
 		return err
 	}
+	defer db.DB.Close()
 
 	// One transaction for the whole seed: a single commit instead of one sync per row, and a seed
 	// that dies partway leaves nothing behind, so IsFirstRun still reports the DB as empty.
@@ -55,13 +56,17 @@ func Generate(userCount int) error {
 	if err != nil {
 		return err
 	}
-	if err := generateAuthorization(ctx, c, ""); err != nil {
+	auth, err := generateAuthorization(ctx, c, "")
+	if err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 
+	// credentials are only shown once they exist, i.e. after the commit
+	log.Printf("Created Client. Details:\nClient-ID: %v\nSecret: %v\nName: %v", c.ID, c.Secret, c.Name)
+	log.Printf("Created authorization with token %v", auth.Token)
 	log.Print("Finished generation.")
 	return nil
 }
@@ -502,7 +507,9 @@ func generateUsers(ctx context.Context, count int) error {
 			VideoLanguage:    "en",
 			Type:             "archive",
 		}
-		err := db.NewQuery(nil, 100).InsertVideo(v)
+		err := database.RetryOnUniqueViolation(func() error {
+			return db.NewQuery(nil, 100).InsertVideo(v)
+		}, func() { v.ID = fmt.Sprint(util.RandomInt(10 * 1000 * 1000)) })
 		if err != nil {
 			return err
 		}
@@ -557,12 +564,10 @@ func generateClient(ctx context.Context) (database.AuthenticationClient, error) 
 		IsExtension: false,
 	}
 
-	client, err := db.NewQuery(nil, 100).InsertOrUpdateAuthenticationClient(client, false)
-	log.Printf("Created Client. Details:\nClient-ID: %v\nSecret: %v\nName: %v", client.ID, client.Secret, client.Name)
-	return client, err
+	return db.NewQuery(nil, 100).InsertOrUpdateAuthenticationClient(client, false)
 }
 
-func generateAuthorization(ctx context.Context, c database.AuthenticationClient, userID string) error {
+func generateAuthorization(ctx context.Context, c database.AuthenticationClient, userID string) (database.Authorization, error) {
 	db := ctx.Value("db").(database.CLIDatabase)
 
 	a := database.Authorization{
@@ -572,16 +577,7 @@ func generateAuthorization(ctx context.Context, c database.AuthenticationClient,
 		Scopes:    "",
 	}
 
-	auth, err := db.NewQuery(nil, 100).CreateAuthorization(a)
-	if err != nil {
-		return err
-	}
-	if userID != "" {
-		log.Printf("Created authorization for user %v with token %v", userID, auth.Token)
-	} else {
-		log.Printf("Created authorization with token %v", auth.Token)
-	}
-	return nil
+	return db.NewQuery(nil, 100).CreateAuthorization(a)
 }
 
 func intPointer(i int) *int { return &i }

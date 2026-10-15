@@ -101,12 +101,14 @@ func (q *Query) GetPredictions(p Prediction) (*DBResponse, error) {
 
 func (q *Query) InsertPrediction(p Prediction) error {
 	tx := q.begin()
-	tx.NamedExec(generateInsertSQL("predictions", "id", p, false), p)
-
+	_, err := tx.NamedExec(generateInsertSQL("predictions", "id", p, false), p)
 	for _, o := range p.Outcomes {
-		tx.NamedExec(generateInsertSQL("prediction_outcomes", "id", o, false), o)
+		if err != nil {
+			break
+		}
+		_, err = tx.NamedExec(generateInsertSQL("prediction_outcomes", "id", o, false), o)
 	}
-	return tx.Commit()
+	return finish(tx, err)
 }
 
 func (q *Query) InsertPredictionPrediction(p PredictionPrediction) error {

@@ -25,13 +25,8 @@ type EventCacheResponse struct {
 // InsertIntoDB inserts an event into the database for replay functions later.
 func (q *Query) InsertIntoDB(p EventCacheParameters) error {
 	tx := q.begin()
-	tx.NamedExec(`insert into events(id, event, json, from_user, to_user, transport, timestamp) values(:id, :event, :json, :from_user, :to_user, :transport, :timestamp)`, p)
-	err := tx.Commit()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	_, err := tx.NamedExec(`insert into events(id, event, json, from_user, to_user, transport, timestamp) values(:id, :event, :json, :from_user, :to_user, :transport, :timestamp)`, p)
+	return finish(tx, err)
 }
 
 // GetEventByID returns an event based on an ID provided for replay.
