@@ -45,14 +45,9 @@ func (q *Query) GetAuthorizationByToken(token string) (Authorization, error) {
 func (q *Query) InsertOrUpdateAuthenticationClient(client AuthenticationClient, upsert bool) (AuthenticationClient, error) {
 	db := q.DB
 
-	stmt := `insert into clients values(:id, :secret, :is_extension, :name)`
-	if upsert {
-		stmt += ` on conflict(id) do update set secret=:secret, is_extension:is_extension, name=:name`
-	}
-
 	client.Secret = generateString(30)
 
-	err := retryOnUniqueViolation(func() error {
+	err := RetryOnUniqueViolation(func() error {
 		_, err := db.NamedExec(generateInsertSQL("clients", "id", client, upsert), client)
 		return err
 	}, func() { client.ID = util.RandomClientID() })
@@ -63,7 +58,7 @@ func (q *Query) CreateAuthorization(a Authorization) (Authorization, error) {
 	a.Token = generateString(15)
 	a.ExpiresAt = util.GetTimestamp().Add(24 * 30 * time.Hour).Format(time.RFC3339Nano)
 
-	err := retryOnUniqueViolation(func() error {
+	err := RetryOnUniqueViolation(func() error {
 		_, err := q.DB.NamedExec(generateInsertSQL("authorizations", "", a, false), a)
 		return err
 	}, func() { a.Token = generateString(15) })

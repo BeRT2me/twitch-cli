@@ -613,6 +613,8 @@ func TestTransactionRollback(t *testing.T) {
 
 	tx, err := db.DB.Beginx()
 	a.Nil(err)
+	// a failed assertion must not leave the pool's only connection inside an open transaction
+	defer tx.Rollback()
 	tq := CLIDatabase{DB: db.DB, Tx: tx}.NewQuery(nil, 100)
 
 	userID := util.RandomUserID()

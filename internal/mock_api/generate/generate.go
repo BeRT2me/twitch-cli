@@ -82,13 +82,12 @@ func generateUsers(ctx context.Context, count int) error {
 			IGDB: fmt.Sprintf("%v", util.RandomInt(10*100*100)),
 		}
 
-		err := db.NewQuery(nil, 100).InsertCategory(category, false)
-		// a colliding random ID means an earlier generate already created this category, which is fine to reuse
-		if err != nil && !database.IsUniqueViolation(err) {
+		// random IDs can collide with each other or with an earlier generate, so retry with a fresh one
+		err := database.RetryOnUniqueViolation(func() error {
+			return db.NewQuery(nil, 100).InsertCategory(category, false)
+		}, func() { category.ID = fmt.Sprintf("%v", util.RandomInt(10*100*100)) })
+		if err != nil {
 			return err
-		}
-		category = database.Category{
-			ID: category.ID,
 		}
 		categoryIds = append(categoryIds, category.ID)
 	}
@@ -96,8 +95,6 @@ func generateUsers(ctx context.Context, count int) error {
 	// create users
 	log.Printf("Creating users...")
 	for i := 0; i < count; i++ {
-		id := util.RandomUserID()
-
 		un := generateUsername()
 
 		bt := ""
@@ -114,10 +111,8 @@ func generateUsers(ctx context.Context, count int) error {
 			bt = "partner"
 		}
 
-		users = append(users, UserInfo{ID: id, Type: bt})
-
 		u := database.User{
-			ID:              id,
+			ID:              util.RandomUserID(),
 			UserLogin:       strings.ToLower(un),
 			DisplayName:     un,
 			Email:           fmt.Sprintf("%v@testing.mocks", un),
@@ -131,17 +126,20 @@ func generateUsers(ctx context.Context, count int) error {
 			Language:        "en",
 		}
 
-		err := db.NewQuery(nil, 100).InsertUser(u, false)
+		err := database.RetryOnUniqueViolation(func() error {
+			return db.NewQuery(nil, 100).InsertUser(u, false)
+		}, func() { u.ID = util.RandomUserID() })
 		if err != nil {
 			return err
 		}
+		users = append(users, UserInfo{ID: u.ID, Type: bt})
 
 		// Create user chatroom settings
 		_false := false
 		_10 := 10
 		_60 := 60
 		s := database.ChatSettings{
-			BroadcasterID:                 id,
+			BroadcasterID:                 u.ID,
 			SlowMode:                      &_false,
 			SlowModeWaitTime:              &_10,
 			FollowerMode:                  &_false,
@@ -167,8 +165,10 @@ func generateUsers(ctx context.Context, count int) error {
 		CreatedAt:       util.GetTimestamp().Format(time.RFC3339),
 		UpdatedAt:       util.GetTimestamp().Format(time.RFC3339),
 	}
-	err := db.NewQuery(nil, 100).InsertTeam(team)
-	if err != nil && !database.IsUniqueViolation(err) {
+	err := database.RetryOnUniqueViolation(func() error {
+		return db.NewQuery(nil, 100).InsertTeam(team)
+	}, func() { team.ID = fmt.Sprint(util.RandomInt(10 * 1000)) })
+	if err != nil {
 		return err
 	}
 

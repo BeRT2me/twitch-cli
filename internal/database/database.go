@@ -66,12 +66,14 @@ func getDatabase(extendedBusyTimeout bool) (sqlx.DB, error) {
 		var tables int
 		err = db.Get(&tables, "select count(*) from sqlite_master")
 		if err != nil {
+			db.Close()
 			return sqlx.DB{}, err
 		}
 		if tables == 0 {
 			err = initDatabase(*db)
 			if err != nil {
 				log.Printf("%#v", err)
+				db.Close()
 				return sqlx.DB{}, err
 			}
 		}

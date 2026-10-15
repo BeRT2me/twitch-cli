@@ -104,6 +104,7 @@ func (q *Query) InsertSchedule(p ScheduleSegment) error {
 	tx := q.begin()
 	_, err := tx.NamedExec(generateInsertSQL("stream_schedule", "id", p, false), p)
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
 	return tx.Commit()
